@@ -17,3 +17,6 @@ cat output/results.json | jq -cs '.[] | if(has("cmds")) then . else empty end | 
 <br>
 -find devices that are secured<br>
 cat output/results.json | jq 'if(.secured) then . else empty end'<br>
+<br>
+-look at unique list of packages
+cat output/online-packages.json | jq -c '{ip,cmd:.cmds[]} | {ip,cmd:.cmd.cmd,output:.cmd.data|@base64d}| if(.output|test("^Error")) then empty else . end | {ip,package:.output|split("package:")[]} | if(.package|test("^/")) then .package=(.package|split("=")[1]) else . end | {ip,package:.package|rtrimstr("\n")|rtrimstr("\r")}|.package' | sort | uniq -c | sort -n

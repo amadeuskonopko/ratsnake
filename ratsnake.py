@@ -14,7 +14,7 @@ import logging
 import random
 
 def usage():
-    print("[*] Usage: %s [ -t [IPV4 Address or Subnet] -l [file with IPv4 addresses] -p [TCP Port] -c [comma separated commands (optional)] -f [save output to file] -e [use exec, instead of shell (default)] -w [workers] " % sys.argv[0])
+    print("[*] Usage: %s [ -t [IPV4 Address or Subnet] -l [file with IPv4 addresses] -p [TCP Port] -c [file with commands (optional)] -f [save output to file] -e [use exec, instead of shell (default)] -w [workers] " % sys.argv[0])
     print("[*] Example: %s -t 10.0.0.0/24 -w 15 -p 5555 -c 'id,echo $PATH,ss -antp,su -c id' -f out.json " % sys.argv[0])
     print("[*] Example: %s -t 10.0.0.0/24 -w 15 -p 5555" % sys.argv[0])
     print("[*] Example: %s -l ips-with-adb-exposed.txt -w 40 -p 5555 -c 'cat /sdcard/screencap.png' -f out.json -e" % sys.argv[0])
@@ -28,7 +28,7 @@ def read_file(filename):
             #print("[*] found file %s" % filename)
             return targets
     except Exception as e:
-        print("\n[*] %s\n" % e)
+        print("\n[*] %s %s\n" % (e, filename))
         usage()
 
 def write_file(filename, data):
@@ -54,7 +54,7 @@ def receive_from(connection):
     return buffer
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"t:p:c:w:l:f:e",["target","port","command","workers","list","file","exec"])
+    opts, args = getopt.getopt(sys.argv[1:],"t:p:w:l:f:c:e",["target","port","workers","list","file","cmds","exec"])
 except getopt.GetoptError as err:
     print(str(err))
     usage()
@@ -62,7 +62,7 @@ except getopt.GetoptError as err:
 target = None
 workers = None
 targetPort = None
-command = None
+commands = None
 targetList = None
 outFile = None
 adbExec = None
@@ -78,8 +78,6 @@ for o, a in opts:
         targetPort = int(a)
     if o in ("-w", "--workers"):
         workers = int(a)
-    if o in ("-c", "--command"):
-        command = a
     if o in ("-l", "--list"):
         if target:
             targetList = True
@@ -88,7 +86,11 @@ for o, a in opts:
         outFile = a
     if o in ("-e", "--exec"):
         adbExec = True
+    if o in ("-c", "--cmds"):
+        commands = read_file(a)
 
+if target and targetList:
+    usage()
 if target and targetList:
     usage()
 elif ((target or targetList) and targetPort):
@@ -96,7 +98,7 @@ elif ((target or targetList) and targetPort):
 else:
     usage()
 
-def discover_host(target, port=targetPort, cmd=command, logfile=outFile, adb_exec=adbExec):
+def discover_host(target, port=targetPort, cmd=commands, logfile=outFile, adb_exec=adbExec):
 
     data = adbCommand("CNXN", 16777217, 256*4096, "host::features=abb_exec,fixed_push_symlink_timestamp,abb,stat_v2,apex,shell_v2,fixed_push_mkdir,cmd").adbPacket
     validConnect = False
@@ -130,9 +132,8 @@ def discover_host(target, port=targetPort, cmd=command, logfile=outFile, adb_exe
     if validConnect and cmd:
 
         logData["cmds"] = []
-        commandList = cmd.split(",")
 
-        for command in commandList:
+        for command in cmd:
             # open a connection to execute a command
             gotOkay = False
             result = b""
