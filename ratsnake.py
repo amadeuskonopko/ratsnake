@@ -6,12 +6,12 @@ import base64
 import getopt
 import sys
 import time
+import logging
+import random
 from datetime import datetime
 from adb.adbStructure import adbCommand,adbExtract
 from concurrent.futures import ThreadPoolExecutor
 from netaddr import IPNetwork,IPAddress 
-import logging
-import random
 
 def usage():
     print("[*] Usage: %s [ -t [IPV4 Address or Subnet] -l [file with IPv4 addresses] -p [TCP Port] -c [file with commands (optional)] -f [save output to file] -e [use exec, instead of shell (default)] -w [workers] " % sys.argv[0])
@@ -112,7 +112,6 @@ def discover_host(target, port=targetPort, cmd=commands, logfile=outFile, adb_ex
         client.send(data)
         recv_buffer = receive_from(client)
     except Exception as e:
-        print(e)
         return
 
     if len(recv_buffer):
