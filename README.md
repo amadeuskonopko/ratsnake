@@ -18,5 +18,8 @@ cat output/results.json | jq -cs '.[] | if(has("cmds")) then . else empty end | 
 -find devices that are secured<br>
 cat output/results.json | jq 'if(.secured) then . else empty end'<br>
 <br>
--look at unique list of packages
-cat output/online-packages.json | jq -c '{ip,cmd:.cmds[]} | {ip,cmd:.cmd.cmd,output:.cmd.data|@base64d}| if(.output|test("^Error")) then empty else . end | {ip,package:.output|split("package:")[]} | if(.package|test("^/")) then .package=(.package|split("=")[1]) else . end | {ip,package:.package|rtrimstr("\n")|rtrimstr("\r")}|.package' | sort | uniq -c | sort -n
+-look at unique list of packages<br>
+cat output/online-packages.json | jq -c '{ip,cmd:.cmds[]} | {ip,cmd:.cmd.cmd,output:.cmd.data|@base64d}| if(.output|test("^Error")) then empty else . end | {ip,package:.output|split("package:")[]} | if(.package|test("^/")) then .package=(.package|split("=")[1]) else . end | {ip,package:.package|rtrimstr("\n")|rtrimstr("\r")}|.package' | sort | uniq -c | sort -n<br>
+<br>
+-format results into csv<br>
+cat output/results.json | jq -cs '.[] | if(has("device_header") and has("cmds")) then . else empty end | {ip,cmds,device:.device_header|@base64d|split(";")}|{ip,cmds,name:.device[0],model:.device[1],device:.device[2],features:.device[3]} | {ip:(.ip|rtrimstr("\n")),device,model,features,cmd:(.cmds[]|.cmd),output:(.cmds[]|.data|@base64d)}|[.ip,.device,.model,.features,.cmd,.output]' | jq -c '.'
