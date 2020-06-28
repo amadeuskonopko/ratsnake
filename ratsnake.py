@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python3.8
 
 import socket
 import json
@@ -38,8 +38,8 @@ def write_file(filename, data):
 def receive_from(connection):
 
     buffer = b""
-    # We set a 10 second timeout; depending on your target, this may need to be adjusted
-    connection.settimeout(10)
+    # We set a 2 second timeout; depending on your target, this may need to be adjusted
+    connection.settimeout(2)
     try:
         # keep reading into the buffer until there's no more data or we time out
         while True:
@@ -202,4 +202,5 @@ for i in list(results):
     else:
         if outFile:
             write_file(outFile,i)
-        print(json.dumps(i))
+        else:
+            print(json.dumps(i))
