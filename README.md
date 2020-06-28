@@ -8,3 +8,6 @@ what is rat snake?
 -supports targeting ipv4 networks or reading targets from a list<br>
 -ipv6 not supported<br>
 -adb authorization not supported<br>
+
+-how to get device name, model, and features 
+cat output/results.json | jq -s '.[] | if(has("device_header")) then . else empty end | {ip,device:.device_header|@base64d|split(";")}|{ip,name:.device[0],model:.device[1],device:.device[2],features:.device[3]}'
