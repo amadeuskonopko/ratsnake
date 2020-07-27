@@ -25,7 +25,6 @@ def read_file(filename):
     try:
         with open(filename, "r") as f:
             targets = list(f)
-            #print("[*] found file %s" % filename)
             return targets
     except Exception as e:
         print("\n[*] %s %s\n" % (e, filename))
@@ -41,7 +40,7 @@ def receive_from(connection):
     # We set a 10 second timeout; depending on your target, this may need to be adjusted
     connection.settimeout(10)
     try:
-        # keep reading into the buffer until there's no more data or we time out
+        # keep reading the buffer until there's no more data or we time out
         while True:
             data = connection.recv(4096)
             if data:
@@ -117,7 +116,7 @@ def discover_host(target, port=targetPort, cmd=commands, logfile=outFile, adb_ex
 
     if len(recv_buffer):
         logData["ts"] = str(datetime.utcnow()).split(".")[0] + " UTC"
-        logData["ip"] = str(target)
+        logData["ip"] = str(target).rstrip("\n")
         adb_header = adbExtract(recv_buffer).adbMessages
         for messages in adb_header:
             if messages["command"] in (b"CNXN", b"AUTH"):
@@ -195,11 +194,9 @@ def discover_host(target, port=targetPort, cmd=commands, logfile=outFile, adb_ex
 with ThreadPoolExecutor(max_workers=workers) as executor:
     results = executor.map(discover_host,target)
 
-# write results to stdout and output if specified
-for i in list(results):
-    if i == None:
-        pass
-    else:
-        if outFile:
-            write_file(outFile,i)
-        print(json.dumps(i))
+# save output to file (-f)
+if outFile:
+    write_file(outFile,list(results))
+# or write to stdout
+else:
+    print(list(results))
