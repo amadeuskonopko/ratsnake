@@ -5,12 +5,10 @@ import json
 import base64
 import getopt
 import sys
-import time
 from datetime import datetime
 from adb.adbStructure import adbCommand,adbExtract
 from concurrent.futures import ThreadPoolExecutor
 from netaddr import IPNetwork,IPAddress 
-import logging
 import random
 
 def usage():
@@ -38,7 +36,7 @@ def receive_from(connection):
 
     buffer = b""
     # We set a 10 second timeout; depending on your target, this may need to be adjusted
-    connection.settimeout(10)
+    connection.settimeout(2)
     try:
         # keep reading the buffer until there's no more data or we time out
         while True:
@@ -105,98 +103,107 @@ def discover_host(target, port=targetPort, cmd=commands, logfile=outFile, adb_ex
     lastCommand = b""
     logData = {}
 
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    logData["ts"] = str(datetime.utcnow()).split(".")[0] + " UTC"
+    logData["ip"] = str(target).rstrip("\n")
+
     try:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect((str(target),port))
         client.send(data)
         recv_buffer = receive_from(client)
     except Exception as e:
-        print(e)
-        return
-
-    if len(recv_buffer):
-        logData["ts"] = str(datetime.utcnow()).split(".")[0] + " UTC"
-        logData["ip"] = str(target).rstrip("\n")
-        adb_header = adbExtract(recv_buffer).adbMessages
-        for messages in adb_header:
-            if messages["command"] in (b"CNXN", b"AUTH"):
-                validConnect = True
-                if messages["command"] == b"AUTH":
-                    logData["secured"] = True
-                else:
-                    logData["device_header"] = base64.b64encode(messages["payload"]).decode('utf-8')
-                    logData["secured"] = False
-                break
-
-    if validConnect and cmd:
-
-        logData["cmds"] = []
-
-        for command in cmd:
-            # open a connection to execute a command
-            gotOkay = False
-            result = b""
-            closeCounter = 0
-            recv_buffer = b""
-            lastCommand = b""
-
-            while gotOkay == False and closeCounter < 1:
-
-                localId = random.randint(1,4294967295)
-
-                if adb_exec:
-                    payload = "exec:" + command + "\x00"
-                else:
-                    payload = "shell:" + command + "\x00"
-                data = adbCommand("OPEN", localId, 0, payload).adbPacket
-                client.send(data)
-                recv_buffer = receive_from(client)
-
-                if len(recv_buffer):
-                    adb_header = adbExtract(recv_buffer).adbMessages
-                    for messages in adb_header:
-                        if messages["command"] == b"OKAY":
-                            gotOkay = True
-                            remoteId = int.from_bytes(messages["arg0"], 'little')
-                        if messages["command"] == b"WRTE" and gotOkay:
-                            result += messages["payload"]
-                        lastCommand = messages["command"]
-
-                closeCounter += 1
-
-            if (lastCommand == b"WRTE" and gotOkay) or lastCommand == b"CLSE":
-                # send okays until we get a close
-                while True:
-                    if lastCommand == b"CLSE":
-                        break
-                    else:
-                        data = adbCommand("OKAY", localId, remoteId, "").adbPacket
-                        client.send(data)
-                        recv_buffer = receive_from(client)
-                        if len(recv_buffer):
-                            adb_header = adbExtract(recv_buffer).adbMessages
-                            for messages in adb_header:
-                                if messages["command"] == b"WRTE":
-                                    result += messages["payload"]
-                            lastCommand = messages["command"]
-                        else:
-                            break
-
-                logData["cmds"].append({"cmd" : command, "data" : base64.b64encode(result).decode('utf-8')})
-
-    if logData:
+        logData["error"] = str(e)
         return logData
-    else:
-        return
-    
+
+    try:
+        if len(recv_buffer):
+            adb_header = adbExtract(recv_buffer).adbMessages
+            for messages in adb_header:
+                if messages["command"] in (b"CNXN", b"AUTH"):
+                    validConnect = True
+                    if messages["command"] == b"AUTH":
+                        logData["secured"] = True
+                    else:
+                        logData["device_header"] = base64.b64encode(messages["payload"]).decode('utf-8')
+                        logData["secured"] = False
+                    break
+        else:
+            logData["error"] = "No data returned"
+
+    except Exception as e:
+        logData["error"] = str(e)
+        return logData
+
+    try:
+
+        if validConnect and cmd:
+
+            logData["cmds"] = []
+
+            for command in cmd:
+                # open a connection to execute a command
+                gotOkay = False
+                result = b""
+                closeCounter = 0
+                recv_buffer = b""
+                lastCommand = b""
+
+                while gotOkay == False and closeCounter < 1:
+
+                    localId = random.randint(1,4294967295)
+
+                    if adb_exec:
+                        payload = "exec:" + command + "\x00"
+                    else:
+                        payload = "shell:" + command + "\x00"
+                    data = adbCommand("OPEN", localId, 0, payload).adbPacket
+                    client.send(data)
+                    recv_buffer = receive_from(client)
+
+                    if len(recv_buffer):
+                        adb_header = adbExtract(recv_buffer).adbMessages
+                        for messages in adb_header:
+                            if messages["command"] == b"OKAY":
+                                gotOkay = True
+                                remoteId = int.from_bytes(messages["arg0"], 'little')
+                            if messages["command"] == b"WRTE" and gotOkay:
+                                result += messages["payload"]
+                            lastCommand = messages["command"]
+
+                    closeCounter += 1
+
+                if (lastCommand == b"WRTE" and gotOkay) or lastCommand == b"CLSE":
+                    # send okays until we get a close
+                    while True:
+                        if lastCommand == b"CLSE":
+                            break
+                        else:
+                            data = adbCommand("OKAY", localId, remoteId, "").adbPacket
+                            client.send(data)
+                            recv_buffer = receive_from(client)
+                            if len(recv_buffer):
+                                adb_header = adbExtract(recv_buffer).adbMessages
+                                for messages in adb_header:
+                                    if messages["command"] == b"WRTE":
+                                        result += messages["payload"]
+                                lastCommand = messages["command"]
+                            else:
+                                break
+
+                    logData["cmds"].append({"cmd" : command, "data" : base64.b64encode(result).decode('utf-8')})
+
+    except Exception as e:
+        logData["error"] = str(e)
+
+    return logData
 
 # start the adb scanner
 with ThreadPoolExecutor(max_workers=workers) as executor:
     results = executor.map(discover_host,target)
 
-# save output to file (-f)
+# remove any NULL values and save output to file (-f)
 if outFile:
-    write_file(outFile,list(results))
-# or write to stdout
+    write_file(outFile,list(filter(None,results)))
+# or print to stdout
 else:
     print(list(results))
